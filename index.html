@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>CSV to JSON Converter</title>
+    <link rel="stylesheet" href="app.css">
+</head>
+<body>
+<h1>CSV to JSON Converter</h1>
+<form id="csvForm">
+    <div class="upload">
+        <label for="csvFile" id="uploadTrigger">Upload CSV</label>
+        <span id="selectedFile"></span>
+        <input type="file" id="csvFile" accept=".csv" required class="hidden">
+        <button type="submit" id="convert">Convert to JSON</button>
+    </div>
+    <div class="config">
+        <div>
+            <label for="delimiter">Delimiter</label>
+            <input type="text" id="delimiter" placeholder="Delimiter (default: ,)" value=",">
+            <small>Character that separates fields (e.g., comma, semicolon, etc.).</small>
+        </div>
+        <div>
+            <label for="quotechar">Quote Character</label>
+            <input type="text" id="quotechar" placeholder="Quote character (default: &quot;)" value="&quot;">
+            <small>Character used to enclose fields that contain special characters.</small>
+        </div>
+        <div>
+            <label for="escapechar">Escape Character</label>
+            <input type="text" id="escapechar" placeholder="Escape character (optional)">
+            <small>Character used to escape special characters (optional).</small>
+        </div>
+        <div>
+            <label for="lineterminator">Line Terminator</label>
+            <input type="text" id="lineterminator" placeholder="Line terminator (default: \n)" value="\n">
+            <small>String used to terminate lines (e.g., \n or \r\n). Use escaped sequences like <code>\n</code> or <code>\r\n</code>.</small>
+        </div>
+    </div>
+</form>
+
+<div id="result" class="hidden">
+    <h2>Converted JSON:</h2>
+    <pre id="jsonOutput"></pre>
+</div>
+
+<button id="downloadBtn" class="hidden">Download JSON</button>
+
+<footer>
+    <div>
+        <p>A product of <a href="https://sereniteit.com" alt="Sereniteit" />Sereniteit</a></p>
+    </div>
+</footer>
+<script>
+    if (document.getElementById('csvForm')) {
+        document.getElementById('csvForm').addEventListener('change', function(e){
+            document.getElementById('selectedFile').innerHTML = e.target.value;
+        });
+    };
+    document.getElementById('csvForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+
+        // Get file and configuration values
+        const fileInput = document.getElementById('csvFile');
+        if (fileInput.files.length === 0) {
+            alert("Please select a CSV file.");
+            return;
+        }
+        const delimiter = document.getElementById('delimiter').value || ',';
+        const quotechar = document.getElementById('quotechar').value || '"';
+        const escapechar = document.getElementById('escapechar').value || null;
+        const lineterminatorRaw = document.getElementById('lineterminator').value || "\\n";
+        // Convert escaped sequences (like "\n" to an actual newline)
+        const lineterminator = lineterminatorRaw.replace(/\\n/g, "\n").replace(/\\r/g, "\r");
+
+        const file = fileInput.files[0];
+        const reader = new FileReader();
+
+        reader.onload = function(event) {
+            const csvText = event.target.result;
+            // Convert CSV to JSON using the specified options
+            const json = csvToJson(csvText, { delimiter, quotechar, escapechar, lineterminator });
+            document.getElementById('jsonOutput').textContent = JSON.stringify(json, null, 4);
+            document.getElementById('result').removeAttribute('class');
+            document.getElementById('downloadBtn').removeAttribute('class');
+        };
+
+        reader.readAsText(file);
+    });
+
+    function csvToJson(csvText, options) {
+        const { delimiter, quotechar, escapechar, lineterminator } = options;
+        // Split the CSV text into lines using the specified line terminator
+        const lines = csvText.split(lineterminator);
+        if (lines.length < 2) return [];
+
+        // Parse header line
+        const headers = parseLine(lines[0], delimiter, quotechar, escapechar);
+        const jsonData = [];
+
+        // Process each subsequent line
+        for (let i = 1; i < lines.length; i++) {
+            // Skip empty lines
+            if (lines[i].trim() === "") continue;
+            const values = parseLine(lines[i], delimiter, quotechar, escapechar);
+            const obj = {};
+            headers.forEach((header, index) => {
+                obj[header] = values[index];
+            });
+            jsonData.push(obj);
+        }
+        document.getElementById('selectedFile').innerHTML = '';
+        return jsonData;
+    }
+
+    // A simple CSV line parser that supports configurable delimiter, quote, and escape characters.
+    function parseLine(line, delimiter, quotechar, escapechar) {
+        let result = [];
+        let current = '';
+        let inQuotes = false;
+
+        for (let i = 0; i < line.length; i++) {
+            const char = line[i];
+
+            if (char === quotechar) {
+                // If we're in quotes and the next character is also a quote, it's an escaped quote.
+                if (inQuotes && line[i + 1] === quotechar) {
+                    current += quotechar;
+                    i++; // Skip the next quote character
+                } else {
+                    inQuotes = !inQuotes;
+                }
+            } else if (char === delimiter && !inQuotes) {
+                result.push(current);
+                current = '';
+            } else {
+                // Optionally, you can handle escape characters here if needed.
+                if (escapechar && char === escapechar && line[i+1] === quotechar) {
+                    i++; // Skip the escape character and take the next char literally.
+                    current += quotechar;
+                } else {
+                    current += char;
+                }
+            }
+        }
+        result.push(current);
+        return result;
+    }
+
+    // Download JSON file
+    document.getElementById('downloadBtn').addEventListener('click', function() {
+        const jsonContent = document.getElementById('jsonOutput').textContent;
+        const blob = new Blob([jsonContent], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = "output.json";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    });
+</script>
+</body>
+</html>
